@@ -11,7 +11,10 @@ const {
 } = require('../utils/errorHandler');
 
 exports.register = asyncHandler(async (req, res) => {
-  const { name, email, password, role, phone } = req.body;
+  const { name, email, password, phone } = req.body;
+
+  // Public registration is restricted to customer accounts.
+  const role = 'customer';
 
   // Check if user already exists
   const existingUser = await User.findOne({ where: { email } });
@@ -19,55 +22,41 @@ exports.register = asyncHandler(async (req, res) => {
     throw new ConflictError('User with this email already exists');
   }
 
-  // Validate password strength
-  if (password.length < 6) {
-    const remaining = 6 - password.length;
-    throw new ValidationError(`Password must be at least 6 characters long. Please add ${remaining} more character${remaining > 1 ? 's' : ''}.`);
+  // Validate password
+  if (!password || password.length < 6) {
+    throw new ValidationError(
+      'Password must be at least 6 characters long.'
+    );
   }
 
   // Hash password
   const hashedPassword = await bcrypt.hash(password, 12);
 
-  // Create user
-  const user = await User.create({ 
-    name, 
-    email, 
-    password: hashedPassword, 
-    role 
+  // Create user and associated customer record
+  const user = await User.create({
+    name,
+    email,
+    password: hashedPassword,
+    role
   });
 
-  // Create associated records based on role
   try {
-    if (role === 'customer') {
-      await Customer.create({ 
-        name, 
-        email, 
-        phone: phone || '', 
-        address: '', 
-        id: user.id 
-      });
-    } else if (role === 'agent') {
-      if (!phone) {
-        throw new ValidationError('Phone number is required for agent registration');
-      }
-      const Agent = require('../models/Agent');
-      await Agent.create({ 
-        name, 
-        email, 
-        phone, 
-        id: user.id 
-      });
-    }
+    await Customer.create({
+      name,
+      email,
+      phone: phone || '',
+      address: '',
+      id: user.id
+    });
   } catch (error) {
-    // If creating associated record fails, delete the user
     await User.destroy({ where: { id: user.id } });
     throw error;
   }
 
   // Generate JWT token
   const token = jwt.sign(
-    { id: user.id, role: user.role }, 
-    process.env.JWT_SECRET, 
+    { id: user.id, role: user.role },
+    process.env.JWT_SECRET,
     { expiresIn: '24h' }
   );
 
@@ -75,16 +64,17 @@ exports.register = asyncHandler(async (req, res) => {
     success: true,
     message: 'User registered successfully',
     data: {
-      user: { 
-        id: user.id, 
-        name: user.name, 
-        email: user.email, 
-        role: user.role 
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role
       },
       token
     }
   });
 });
+
 
 exports.login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;

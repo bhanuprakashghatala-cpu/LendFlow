@@ -199,9 +199,7 @@ function Register({ onRegister, onLogin }) {
               cursor: 'pointer'
             }}
           >
-          <option value="customer">Customer</option>
-          <option value="agent">Agent</option>
-          <option value="admin">Admin</option>
+            <option value="customer">Customer</option>
         </select>
         </div>
 
